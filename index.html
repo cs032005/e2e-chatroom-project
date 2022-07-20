@@ -55,19 +55,22 @@
 			}
 		</style>
 		<script type='text/javascript' src='lib/socket.io.js'></script>
+		<script type='text/javascript' src='lib/aes.js'></script>
 	</head>
 	<body>
 		<div class='wrapper'>
 			<center><h3 id='title'></h3></center>
-			<input id='chatBar' type='text' placeholder='Enter a message' maxlength='256'/>
-			<button id='chatBarBtn' onclick='sendMessage(chatBar.value)'>Send</button>
 			<table id='chatFeed'>
 			</table>
+			<input id='chatBar' type='text' placeholder='Enter a message' maxlength='256'/>
+			<button id='chatBarBtn' onclick='sendMessage(chatBar.value)'>Send</button>
 		</div>
 	</body>
 	<script type='text/javascript'>
 		'use strict';
 
+		let key;
+		let crypto;
 		let socket = io();
 		let userName = prompt('What is your name?', 'Guest') || 'Guest';
 		let serverName = null;
@@ -101,6 +104,16 @@
 
 
 		function connected() {
+			key = new Array(16);
+			for(let i in serverName) {
+				if(i >= key.length) {
+					break;
+				}
+				let c = serverName[i];
+				key[i] = c.charCodeAt(0);
+			}
+			crypto = new AES.Crypto(key);
+
 			title.innerText = serverName;
 			chatFeed.innerHTML = '<tr><th id="chatFeedUserColumn"></th><th id="chatFeedMessageColumn"></th></tr>';
 		}
@@ -119,17 +132,29 @@
 		}
 
 		function sendMessage(message) {
-			socket.emit('broadcastMessage', message);
+			crypto.setCounter(key);
+			let ciphertext = crypto.encrypt(message);
+			socket.emit('broadcastMessage', ciphertext);
 			chatBar.value = '';
 		}
 
 		function receiveMessage(user, message) {
 			let html = '';
 			html += '<tr>';
-			html += '<td>' + user + '</td>'
-			html += '<td>' + message + '</td>'
+			html += '<td>' + user + '</td>';
+			html += '<td>' + message + '</td>';
+			if(user != '') {
+				html += '<td><button onclick="decryptMessage(this)">Decrypt</button></td>';
+			}
 			html += '</tr>'
 			chatFeed.innerHTML = html + chatFeed.innerHTML;
+		}
+
+		function decryptMessage(button) {
+			let ciphertext = button.parentElement.parentElement.childNodes[1];
+
+			ciphertext.innerText = crypto.decrypt(ciphertext.innerText);
+			button.remove();
 		}
 	</script>
 </html>
